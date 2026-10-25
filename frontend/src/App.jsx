@@ -15,9 +15,6 @@ import {
   Image as ImageIcon,
   X,
   Layers,
-  Shield,
-  Activity,
-  UserCheck,
   RefreshCw,
   FolderKanban
 } from 'lucide-react';
@@ -218,8 +215,16 @@ export default function App() {
     }
   };
 
+  // Helper to ensure media files resolve to Render production host
+  const getCleanMediaUrl = (rawUrl) => {
+    if (!rawUrl) return '';
+    return rawUrl
+      .replace(/^https?:\/\/(127\.0\.0\.1|localhost):8000\/?/, 'https://civicfix-t3mx.onrender.com/')
+      .replace(/^\/?uploads\//, 'https://civicfix-t3mx.onrender.com/uploads/');
+  };
+
   // ---------------------------------------------------------------------------
-  // AUTH SCREEN (Clean Crisp Slate Card)
+  // AUTH SCREEN
   // ---------------------------------------------------------------------------
   if (!token || !user) {
     return (
@@ -390,7 +395,7 @@ export default function App() {
         {/* Admin KPI Overview Cards */}
         {user.role === 'admin' && analytics && (
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="bg-slate-850 bg-slate-800/50 border border-slate-700/80 p-5 rounded-2xl shadow-sm">
+            <div className="bg-slate-800/50 border border-slate-700/80 p-5 rounded-2xl shadow-sm">
               <div className="flex justify-between items-center text-slate-400 text-xs font-medium">
                 <span>Total Registered</span>
                 <BarChart3 className="w-4 h-4 text-slate-400" />
@@ -580,101 +585,106 @@ export default function App() {
               </div>
             ) : (
               <div className="space-y-3.5">
-                {complaints.map((item) => (
-                  <div key={item.id} className="bg-slate-800/40 border border-slate-700/80 p-5 rounded-2xl hover:border-slate-600/80 transition shadow-sm">
-                    <div className="flex justify-between items-start gap-4">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-[11px] font-mono bg-slate-900 border border-slate-700 text-teal-300 px-2 py-0.5 rounded-md">
-                            {item.ticket_id}
-                          </span>
-                          <span className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md ${
-                            item.priority === 'Critical' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' :
-                            item.priority === 'High' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' :
-                            'bg-slate-700/50 text-slate-300'
-                          }`}>
-                            {item.priority}
-                          </span>
+                {complaints.map((item) => {
+                  const mediaUrl = getCleanMediaUrl(item.image_url);
+                  const isVideo = ['.mp4', '.mov', '.webm'].some((ext) => mediaUrl.toLowerCase().endsWith(ext));
+
+                  return (
+                    <div key={item.id} className="bg-slate-800/40 border border-slate-700/80 p-5 rounded-2xl hover:border-slate-600/80 transition shadow-sm">
+                      <div className="flex justify-between items-start gap-4">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] font-mono bg-slate-900 border border-slate-700 text-teal-300 px-2 py-0.5 rounded-md">
+                              {item.ticket_id}
+                            </span>
+                            <span className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md ${
+                              item.priority === 'Critical' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' :
+                              item.priority === 'High' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' :
+                              'bg-slate-700/50 text-slate-300'
+                            }`}>
+                              {item.priority}
+                            </span>
+                          </div>
+                          <h3 className="text-sm font-semibold text-white mt-2">{item.title}</h3>
                         </div>
-                        <h3 className="text-sm font-semibold text-white mt-2">{item.title}</h3>
+                        <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg border ${
+                          item.status === 'Resolved' ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30' :
+                          item.status === 'In Progress' ? 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30' :
+                          'bg-amber-500/10 text-amber-300 border-amber-500/30'
+                        }`}>
+                          {item.status}
+                        </span>
                       </div>
-                      <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg border ${
-                        item.status === 'Resolved' ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30' :
-                        item.status === 'In Progress' ? 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30' :
-                        'bg-amber-500/10 text-amber-300 border-amber-500/30'
-                      }`}>
-                        {item.status}
-                      </span>
-                    </div>
 
-                    <p className="text-xs text-slate-300 mt-2 leading-relaxed">{item.description}</p>
+                      <p className="text-xs text-slate-300 mt-2 leading-relaxed">{item.description}</p>
 
-                    {/* Media Display Preview */}
-                    {item.image_url && (
-                      <div className="mt-3 rounded-xl overflow-hidden border border-slate-700/80 max-h-60 bg-black/40 flex items-center justify-center">
-                        {item.image_url.endsWith('.mp4') || item.image_url.endsWith('.mov') || item.image_url.endsWith('.webm') ? (
-                          <video src={item.image_url} controls className="max-h-60 w-full object-contain" />
-                        ) : (<img 
-  src={
-    item.image_url?.startsWith('http')
-      ? item.image_url
-      : `https://civicfix-t3mx.onrender.com${item.image_url?.startsWith('/') ? '' : '/'}${item.image_url}`
-  } 
-  alt="Evidence" 
-  className="max-h-60 w-full object-cover" 
-/>
-                        )}
-                      </div>
-                    )}
-
-                    <div className="flex flex-wrap items-center gap-4 text-[11px] text-slate-400 mt-4 border-t border-slate-700/60 pt-3">
-                      <div className="flex items-center gap-1.5">
-                        <MapPin className="w-3.5 h-3.5 text-slate-500" />
-                        {item.location}
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <Layers className="w-3.5 h-3.5 text-slate-500" />
-                        {item.category}
-                      </div>
-                      <div>
-                        {new Date(item.created_at).toLocaleDateString()}
-                      </div>
-                    </div>
-
-                    {/* Resolution Card */}
-                    {item.resolution && (
-                      <div className="mt-3 bg-emerald-950/30 border border-emerald-500/30 p-3.5 rounded-xl text-xs">
-                        <div className="font-semibold text-emerald-300 flex items-center gap-1.5">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Official Resolution Record
+                      {/* Media Display Preview */}
+                      {mediaUrl && (
+                        <div className="mt-3 rounded-xl overflow-hidden border border-slate-700/80 max-h-60 bg-black/40 flex items-center justify-center">
+                          {isVideo ? (
+                            <video src={mediaUrl} controls className="max-h-60 w-full object-contain" />
+                          ) : (
+                            <img 
+                              src={mediaUrl} 
+                              alt="Evidence" 
+                              className="max-h-60 w-full object-cover" 
+                              onError={(e) => {
+                                e.currentTarget.style.display = 'none';
+                              }}
+                            />
+                          )}
                         </div>
-                        <p className="text-emerald-100 mt-1">{item.resolution.notes}</p>
-                        <div className="text-emerald-400/80 text-[10px] mt-1 font-mono">
-                          Certified by {item.resolution.resolved_by} • {new Date(item.resolution.resolved_at).toLocaleDateString()}
+                      )}
+
+                      <div className="flex flex-wrap items-center gap-4 text-[11px] text-slate-400 mt-4 border-t border-slate-700/60 pt-3">
+                        <div className="flex items-center gap-1.5">
+                          <MapPin className="w-3.5 h-3.5 text-slate-500" />
+                          {item.location}
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <Layers className="w-3.5 h-3.5 text-slate-500" />
+                          {item.category}
+                        </div>
+                        <div>
+                          {new Date(item.created_at).toLocaleDateString()}
                         </div>
                       </div>
-                    )}
 
-                    {/* Admin Actions */}
-                    {user.role === 'admin' && item.status !== 'Resolved' && (
-                      <div className="flex items-center gap-2 mt-4 pt-3 border-t border-slate-700/60">
-                        {item.status === 'Submitted' && (
+                      {/* Resolution Card */}
+                      {item.resolution && (
+                        <div className="mt-3 bg-emerald-950/30 border border-emerald-500/30 p-3.5 rounded-xl text-xs">
+                          <div className="font-semibold text-emerald-300 flex items-center gap-1.5">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Official Resolution Record
+                          </div>
+                          <p className="text-emerald-100 mt-1">{item.resolution.notes}</p>
+                          <div className="text-emerald-400/80 text-[10px] mt-1 font-mono">
+                            Certified by {item.resolution.resolved_by} • {new Date(item.resolution.resolved_at).toLocaleDateString()}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Admin Actions */}
+                      {user.role === 'admin' && item.status !== 'Resolved' && (
+                        <div className="flex items-center gap-2 mt-4 pt-3 border-t border-slate-700/60">
+                          {item.status === 'Submitted' && (
+                            <button
+                              onClick={() => handleUpdateStatus(item.id, 'In Progress')}
+                              className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold rounded-lg transition"
+                            >
+                              Mark In Progress
+                            </button>
+                          )}
                           <button
-                            onClick={() => handleUpdateStatus(item.id, 'In Progress')}
-                            className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold rounded-lg transition"
+                            onClick={() => handleResolveComplaint(item.id)}
+                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg transition"
                           >
-                            Mark In Progress
+                            Resolve Grievance
                           </button>
-                        )}
-                        <button
-                          onClick={() => handleResolveComplaint(item.id)}
-                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg transition"
-                        >
-                          Resolve Grievance
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
