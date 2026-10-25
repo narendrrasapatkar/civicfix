@@ -614,8 +614,15 @@ export default function App() {
                       <div className="mt-3 rounded-xl overflow-hidden border border-slate-700/80 max-h-60 bg-black/40 flex items-center justify-center">
                         {item.image_url.endsWith('.mp4') || item.image_url.endsWith('.mov') || item.image_url.endsWith('.webm') ? (
                           <video src={item.image_url} controls className="max-h-60 w-full object-contain" />
-                        ) : (
-                          <img src={item.image_url} alt="Evidence" className="max-h-60 w-full object-cover" />
+                        ) : (<img 
+  src={
+    item.image_url?.startsWith('http')
+      ? item.image_url
+      : `https://civicfix-t3mx.onrender.com${item.image_url?.startsWith('/') ? '' : '/'}${item.image_url}`
+  } 
+  alt="Evidence" 
+  className="max-h-60 w-full object-cover" 
+/>
                         )}
                       </div>
                     )}
