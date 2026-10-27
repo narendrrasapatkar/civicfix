@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import API from './api';
+import InterServiceCollaboration from './InterServiceCollaboration';
 import { 
   Building2, 
   AlertCircle, 
@@ -16,7 +17,8 @@ import {
   X,
   Layers,
   RefreshCw,
-  FolderKanban
+  FolderKanban,
+  Share2
 } from 'lucide-react';
 
 export default function App() {
@@ -30,6 +32,9 @@ export default function App() {
   const [fullName, setFullName] = useState('');
   const [role, setRole] = useState('citizen');
   const [authError, setAuthError] = useState('');
+
+  // Active Tab: 'dashboard' or 'collaboration'
+  const [activeTab, setActiveTab] = useState('dashboard');
 
   // Complaint Filing Inputs
   const [title, setTitle] = useState('');
@@ -172,7 +177,6 @@ export default function App() {
         image_url: uploadedMediaUrl || null
       });
 
-      // Clear input fields
       setTitle('');
       setDescription('');
       setLocation('');
@@ -180,7 +184,6 @@ export default function App() {
       setUploadedMediaType('');
       if (fileInputRef.current) fileInputRef.current.value = '';
 
-      // Immediately prepend without full page reload
       setComplaints((prev) => [res.data, ...prev]);
     } catch (err) {
       console.error('Submission failed:', err);
@@ -215,7 +218,6 @@ export default function App() {
     }
   };
 
-  // Helper to ensure media files resolve to Render production host
   const getCleanMediaUrl = (rawUrl) => {
     if (!rawUrl) return '';
     return rawUrl
@@ -375,6 +377,31 @@ export default function App() {
           </span>
         </div>
 
+        {/* Tab Switcher */}
+        <div className="flex items-center gap-2 bg-slate-800/80 p-1 rounded-xl border border-slate-700">
+          <button
+            onClick={() => setActiveTab('dashboard')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+              activeTab === 'dashboard'
+                ? 'bg-teal-500 text-white shadow'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            Dashboard
+          </button>
+          <button
+            onClick={() => setActiveTab('collaboration')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition ${
+              activeTab === 'collaboration'
+                ? 'bg-cyan-500 text-white shadow'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Share2 className="w-3.5 h-3.5" />
+            BuildWise Image Exchange
+          </button>
+        </div>
+
         <div className="flex items-center gap-4">
           <div className="text-right">
             <div className="text-xs font-semibold text-slate-200">{user.full_name}</div>
@@ -392,303 +419,305 @@ export default function App() {
 
       {/* Main Workspace */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-8 space-y-6">
-        {/* Admin KPI Overview Cards */}
-        {user.role === 'admin' && analytics && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="bg-slate-800/50 border border-slate-700/80 p-5 rounded-2xl shadow-sm">
-              <div className="flex justify-between items-center text-slate-400 text-xs font-medium">
-                <span>Total Registered</span>
-                <BarChart3 className="w-4 h-4 text-slate-400" />
-              </div>
-              <div className="text-3xl font-extrabold mt-2 text-white">{analytics.summary.total_complaints}</div>
-            </div>
-            <div className="bg-slate-800/50 border border-slate-700/80 p-5 rounded-2xl shadow-sm">
-              <div className="flex justify-between items-center text-amber-400 text-xs font-medium">
-                <span>Pending Verification</span>
-                <Clock className="w-4 h-4" />
-              </div>
-              <div className="text-3xl font-extrabold mt-2 text-amber-300">{analytics.summary.pending}</div>
-            </div>
-            <div className="bg-slate-800/50 border border-slate-700/80 p-5 rounded-2xl shadow-sm">
-              <div className="flex justify-between items-center text-cyan-400 text-xs font-medium">
-                <span>Work In Progress</span>
-                <AlertCircle className="w-4 h-4" />
-              </div>
-              <div className="text-3xl font-extrabold mt-2 text-cyan-300">{analytics.summary.in_progress}</div>
-            </div>
-            <div className="bg-slate-800/50 border border-slate-700/80 p-5 rounded-2xl shadow-sm">
-              <div className="flex justify-between items-center text-emerald-400 text-xs font-medium">
-                <span>Resolved & Closed</span>
-                <CheckCircle2 className="w-4 h-4" />
-              </div>
-              <div className="text-3xl font-extrabold mt-2 text-emerald-300">{analytics.summary.resolved}</div>
-            </div>
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Form Left Side (Citizen Only) */}
-          {user.role === 'citizen' && (
-            <div className="lg:col-span-5 bg-slate-800/40 border border-slate-700/80 p-6 rounded-2xl h-fit shadow-md">
-              <div className="flex items-center gap-2 mb-5">
-                <div className="p-1.5 bg-teal-500/10 border border-teal-500/20 text-teal-400 rounded-lg">
-                  <PlusCircle className="w-4 h-4" />
-                </div>
-                <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-200">Submit New Grievance</h2>
-              </div>
-
-              <form onSubmit={handleCreateComplaint} className="space-y-4">
-                <div>
-                  <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Issue Headline</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Major sewer leakage outside park"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    className="w-full mt-1.5 px-3.5 py-2 bg-slate-900/80 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-teal-400 transition"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Department</label>
-                    <select
-                      value={category}
-                      onChange={(e) => setCategory(e.target.value)}
-                      className="w-full mt-1.5 px-3 py-2 bg-slate-900/80 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-teal-400 transition"
-                    >
-                      <option value="Roads & Infrastructure">Roads & Infrastructure</option>
-                      <option value="Sanitation & Waste">Sanitation & Waste</option>
-                      <option value="Electrical & Lighting">Electrical & Lighting</option>
-                      <option value="Water Supply & Drainage">Water Supply & Drainage</option>
-                    </select>
+        {activeTab === 'collaboration' ? (
+          <InterServiceCollaboration />
+        ) : (
+          <>
+            {/* Admin KPI Overview Cards */}
+            {user.role === 'admin' && analytics && (
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="bg-slate-800/50 border border-slate-700/80 p-5 rounded-2xl shadow-sm">
+                  <div className="flex justify-between items-center text-slate-400 text-xs font-medium">
+                    <span>Total Registered</span>
+                    <BarChart3 className="w-4 h-4 text-slate-400" />
                   </div>
-                  <div>
-                    <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Priority</label>
-                    <select
-                      value={priority}
-                      onChange={(e) => setPriority(e.target.value)}
-                      className="w-full mt-1.5 px-3 py-2 bg-slate-900/80 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-teal-400 transition"
-                    >
-                      <option value="Low">Low</option>
-                      <option value="Medium">Medium</option>
-                      <option value="High">High</option>
-                      <option value="Critical">Critical</option>
-                    </select>
+                  <div className="text-3xl font-extrabold mt-2 text-white">{analytics.summary.total_complaints}</div>
+                </div>
+                <div className="bg-slate-800/50 border border-slate-700/80 p-5 rounded-2xl shadow-sm">
+                  <div className="flex justify-between items-center text-amber-400 text-xs font-medium">
+                    <span>Pending Verification</span>
+                    <Clock className="w-4 h-4" />
                   </div>
+                  <div className="text-3xl font-extrabold mt-2 text-amber-300">{analytics.summary.pending}</div>
                 </div>
-
-                <div>
-                  <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Exact Location / Landmark</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Sector, street corner, landmark"
-                    value={location}
-                    onChange={(e) => setLocation(e.target.value)}
-                    className="w-full mt-1.5 px-3.5 py-2 bg-slate-900/80 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-teal-400 transition"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Description</label>
-                  <textarea
-                    rows={3}
-                    required
-                    placeholder="Specific facts, hazards, duration of issue..."
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    className="w-full mt-1.5 px-3.5 py-2 bg-slate-900/80 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-teal-400 transition"
-                  />
-                </div>
-
-                {/* Evidence Upload */}
-                <div>
-                  <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Visual Evidence</label>
-                  <div className="mt-1.5">
-                    {!uploadedMediaUrl ? (
-                      <label className="flex flex-col items-center justify-center p-4 border border-dashed border-slate-700 hover:border-teal-500/50 bg-slate-900/50 rounded-xl cursor-pointer transition group">
-                        <UploadCloud className="w-5 h-5 text-slate-400 group-hover:text-teal-400 transition mb-1" />
-                        <span className="text-xs text-slate-300 font-medium">
-                          {uploading ? 'Processing file...' : 'Attach Image or Video'}
-                        </span>
-                        <span className="text-[10px] text-slate-500 mt-0.5">JPG, PNG, WEBP, MP4, MOV</span>
-                        <input
-                          ref={fileInputRef}
-                          type="file"
-                          accept="image/*,video/*"
-                          onChange={handleFileUpload}
-                          disabled={uploading}
-                          className="hidden"
-                        />
-                      </label>
-                    ) : (
-                      <div className="rounded-xl border border-slate-700 bg-slate-900 p-2.5 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          {uploadedMediaType === 'video' ? (
-                            <FileVideo className="w-4 h-4 text-teal-400" />
-                          ) : (
-                            <ImageIcon className="w-4 h-4 text-emerald-400" />
-                          )}
-                          <span className="text-xs text-slate-200 truncate max-w-[200px]">
-                            Attached ({uploadedMediaType})
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setUploadedMediaUrl('');
-                            setUploadedMediaType('');
-                            if (fileInputRef.current) fileInputRef.current.value = '';
-                          }}
-                          className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-white"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    )}
+                <div className="bg-slate-800/50 border border-slate-700/80 p-5 rounded-2xl shadow-sm">
+                  <div className="flex justify-between items-center text-cyan-400 text-xs font-medium">
+                    <span>Work In Progress</span>
+                    <AlertCircle className="w-4 h-4" />
                   </div>
+                  <div className="text-3xl font-extrabold mt-2 text-cyan-300">{analytics.summary.in_progress}</div>
                 </div>
-
-                <button
-                  type="submit"
-                  disabled={uploading}
-                  className="w-full py-2.5 bg-gradient-to-r from-teal-500 to-cyan-600 hover:from-teal-400 hover:to-cyan-500 text-white font-semibold rounded-xl text-xs flex items-center justify-center gap-2 transition shadow-md shadow-teal-500/20 active:scale-[0.99]"
-                >
-                  <Send className="w-3.5 h-3.5" /> Dispatch Report
-                </button>
-              </form>
-            </div>
-          )}
-
-          {/* Incident Feed Column */}
-          <div className={user.role === 'citizen' ? 'lg:col-span-7' : 'lg:col-span-12'}>
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-300 flex items-center gap-2">
-                <FolderKanban className="w-4 h-4 text-teal-400" />
-                {user.role === 'admin' ? 'City-Wide Grievance Queue' : 'My Filed Reports'}
-              </h2>
-              <button
-                onClick={loadData}
-                className="text-xs text-slate-400 hover:text-teal-300 flex items-center gap-1.5 transition"
-              >
-                <RefreshCw className="w-3.5 h-3.5" /> Refresh
-              </button>
-            </div>
-
-            {loading && complaints.length === 0 ? (
-              <div className="text-slate-500 text-xs text-center py-12">Querying database...</div>
-            ) : complaints.length === 0 ? (
-              <div className="border border-dashed border-slate-700/80 rounded-2xl p-12 text-center text-slate-500 text-xs">
-                No incidents reported in this scope.
-              </div>
-            ) : (
-              <div className="space-y-3.5">
-                {complaints.map((item) => {
-                  const mediaUrl = getCleanMediaUrl(item.image_url);
-                  const isVideo = ['.mp4', '.mov', '.webm'].some((ext) => mediaUrl.toLowerCase().endsWith(ext));
-
-                  return (
-                    <div key={item.id} className="bg-slate-800/40 border border-slate-700/80 p-5 rounded-2xl hover:border-slate-600/80 transition shadow-sm">
-                      <div className="flex justify-between items-start gap-4">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-[11px] font-mono bg-slate-900 border border-slate-700 text-teal-300 px-2 py-0.5 rounded-md">
-                              {item.ticket_id}
-                            </span>
-                            <span className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md ${
-                              item.priority === 'Critical' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' :
-                              item.priority === 'High' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' :
-                              'bg-slate-700/50 text-slate-300'
-                            }`}>
-                              {item.priority}
-                            </span>
-                          </div>
-                          <h3 className="text-sm font-semibold text-white mt-2">{item.title}</h3>
-                        </div>
-                        <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg border ${
-                          item.status === 'Resolved' ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30' :
-                          item.status === 'In Progress' ? 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30' :
-                          'bg-amber-500/10 text-amber-300 border-amber-500/30'
-                        }`}>
-                          {item.status}
-                        </span>
-                      </div>
-
-                      <p className="text-xs text-slate-300 mt-2 leading-relaxed">{item.description}</p>
-
-                      {/* Media Display Preview */}
-                      {mediaUrl && (
-                        <div className="mt-3 rounded-xl overflow-hidden border border-slate-700/80 max-h-60 bg-black/40 flex items-center justify-center">
-                          {isVideo ? (
-                            <video src={mediaUrl} controls className="max-h-60 w-full object-contain" />
-                          ) : (
-                            <img 
-                              src={mediaUrl} 
-                              alt="Evidence" 
-                              className="max-h-60 w-full object-cover" 
-                              onError={(e) => {
-                                e.currentTarget.style.display = 'none';
-                              }}
-                            />
-                          )}
-                        </div>
-                      )}
-
-                      <div className="flex flex-wrap items-center gap-4 text-[11px] text-slate-400 mt-4 border-t border-slate-700/60 pt-3">
-                        <div className="flex items-center gap-1.5">
-                          <MapPin className="w-3.5 h-3.5 text-slate-500" />
-                          {item.location}
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <Layers className="w-3.5 h-3.5 text-slate-500" />
-                          {item.category}
-                        </div>
-                        <div>
-                          {new Date(item.created_at).toLocaleDateString()}
-                        </div>
-                      </div>
-
-                      {/* Resolution Card */}
-                      {item.resolution && (
-                        <div className="mt-3 bg-emerald-950/30 border border-emerald-500/30 p-3.5 rounded-xl text-xs">
-                          <div className="font-semibold text-emerald-300 flex items-center gap-1.5">
-                            <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Official Resolution Record
-                          </div>
-                          <p className="text-emerald-100 mt-1">{item.resolution.notes}</p>
-                          <div className="text-emerald-400/80 text-[10px] mt-1 font-mono">
-                            Certified by {item.resolution.resolved_by} • {new Date(item.resolution.resolved_at).toLocaleDateString()}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Admin Actions */}
-                      {user.role === 'admin' && item.status !== 'Resolved' && (
-                        <div className="flex items-center gap-2 mt-4 pt-3 border-t border-slate-700/60">
-                          {item.status === 'Submitted' && (
-                            <button
-                              onClick={() => handleUpdateStatus(item.id, 'In Progress')}
-                              className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold rounded-lg transition"
-                            >
-                              Mark In Progress
-                            </button>
-                          )}
-                          <button
-                            onClick={() => handleResolveComplaint(item.id)}
-                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg transition"
-                          >
-                            Resolve Grievance
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+                <div className="bg-slate-800/50 border border-slate-700/80 p-5 rounded-2xl shadow-sm">
+                  <div className="flex justify-between items-center text-emerald-400 text-xs font-medium">
+                    <span>Resolved & Closed</span>
+                    <CheckCircle2 className="w-4 h-4" />
+                  </div>
+                  <div className="text-3xl font-extrabold mt-2 text-emerald-300">{analytics.summary.resolved}</div>
+                </div>
               </div>
             )}
-          </div>
-        </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              {/* Form Left Side (Citizen Only) */}
+              {user.role === 'citizen' && (
+                <div className="lg:col-span-5 bg-slate-800/40 border border-slate-700/80 p-6 rounded-2xl h-fit shadow-md">
+                  <div className="flex items-center gap-2 mb-5">
+                    <div className="p-1.5 bg-teal-500/10 border border-teal-500/20 text-teal-400 rounded-lg">
+                      <PlusCircle className="w-4 h-4" />
+                    </div>
+                    <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-200">Submit New Grievance</h2>
+                  </div>
+
+                  <form onSubmit={handleCreateComplaint} className="space-y-4">
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Issue Headline</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Major sewer leakage outside park"
+                        value={title}
+                        onChange={(e) => setTitle(e.target.value)}
+                        className="w-full mt-1.5 px-3.5 py-2 bg-slate-900/80 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-teal-400 transition"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Department</label>
+                        <select
+                          value={category}
+                          onChange={(e) => setCategory(e.target.value)}
+                          className="w-full mt-1.5 px-3 py-2 bg-slate-900/80 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-teal-400 transition"
+                        >
+                          <option value="Roads & Infrastructure">Roads & Infrastructure</option>
+                          <option value="Sanitation & Waste">Sanitation & Waste</option>
+                          <option value="Electrical & Lighting">Electrical & Lighting</option>
+                          <option value="Water Supply & Drainage">Water Supply & Drainage</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Priority</label>
+                        <select
+                          value={priority}
+                          onChange={(e) => setPriority(e.target.value)}
+                          className="w-full mt-1.5 px-3 py-2 bg-slate-900/80 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-teal-400 transition"
+                        >
+                          <option value="Low">Low</option>
+                          <option value="Medium">Medium</option>
+                          <option value="High">High</option>
+                          <option value="Critical">Critical</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Exact Location / Landmark</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Sector, street corner, landmark"
+                        value={location}
+                        onChange={(e) => setLocation(e.target.value)}
+                        className="w-full mt-1.5 px-3.5 py-2 bg-slate-900/80 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-teal-400 transition"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Description</label>
+                      <textarea
+                        rows={3}
+                        required
+                        placeholder="Specific facts, hazards, duration of issue..."
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
+                        className="w-full mt-1.5 px-3.5 py-2 bg-slate-900/80 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-teal-400 transition"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Visual Evidence</label>
+                      <div className="mt-1.5">
+                        {!uploadedMediaUrl ? (
+                          <label className="flex flex-col items-center justify-center p-4 border border-dashed border-slate-700 hover:border-teal-500/50 bg-slate-900/50 rounded-xl cursor-pointer transition group">
+                            <UploadCloud className="w-5 h-5 text-slate-400 group-hover:text-teal-400 transition mb-1" />
+                            <span className="text-xs text-slate-300 font-medium">
+                              {uploading ? 'Processing file...' : 'Attach Image or Video'}
+                            </span>
+                            <span className="text-[10px] text-slate-500 mt-0.5">JPG, PNG, WEBP, MP4, MOV</span>
+                            <input
+                              ref={fileInputRef}
+                              type="file"
+                              accept="image/*,video/*"
+                              onChange={handleFileUpload}
+                              disabled={uploading}
+                              className="hidden"
+                            />
+                          </label>
+                        ) : (
+                          <div className="rounded-xl border border-slate-700 bg-slate-900 p-2.5 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              {uploadedMediaType === 'video' ? (
+                                <FileVideo className="w-4 h-4 text-teal-400" />
+                              ) : (
+                                <ImageIcon className="w-4 h-4 text-emerald-400" />
+                              )}
+                              <span className="text-xs text-slate-200 truncate max-w-[200px]">
+                                Attached ({uploadedMediaType})
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setUploadedMediaUrl('');
+                                setUploadedMediaType('');
+                                if (fileInputRef.current) fileInputRef.current.value = '';
+                              }}
+                              className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-white"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={uploading}
+                      className="w-full py-2.5 bg-gradient-to-r from-teal-500 to-cyan-600 hover:from-teal-400 hover:to-cyan-500 text-white font-semibold rounded-xl text-xs flex items-center justify-center gap-2 transition shadow-md shadow-teal-500/20 active:scale-[0.99]"
+                    >
+                      <Send className="w-3.5 h-3.5" /> Dispatch Report
+                    </button>
+                  </form>
+                </div>
+              )}
+
+              {/* Incident Feed Column */}
+              <div className={user.role === 'citizen' ? 'lg:col-span-7' : 'lg:col-span-12'}>
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+                    <FolderKanban className="w-4 h-4 text-teal-400" />
+                    {user.role === 'admin' ? 'City-Wide Grievance Queue' : 'My Filed Reports'}
+                  </h2>
+                  <button
+                    onClick={loadData}
+                    className="text-xs text-slate-400 hover:text-teal-300 flex items-center gap-1.5 transition"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" /> Refresh
+                  </button>
+                </div>
+
+                {loading && complaints.length === 0 ? (
+                  <div className="text-slate-500 text-xs text-center py-12">Querying database...</div>
+                ) : complaints.length === 0 ? (
+                  <div className="border border-dashed border-slate-700/80 rounded-2xl p-12 text-center text-slate-500 text-xs">
+                    No incidents reported in this scope.
+                  </div>
+                ) : (
+                  <div className="space-y-3.5">
+                    {complaints.map((item) => {
+                      const mediaUrl = getCleanMediaUrl(item.image_url);
+                      const isVideo = ['.mp4', '.mov', '.webm'].some((ext) => mediaUrl.toLowerCase().endsWith(ext));
+
+                      return (
+                        <div key={item.id} className="bg-slate-800/40 border border-slate-700/80 p-5 rounded-2xl hover:border-slate-600/80 transition shadow-sm">
+                          <div className="flex justify-between items-start gap-4">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[11px] font-mono bg-slate-900 border border-slate-700 text-teal-300 px-2 py-0.5 rounded-md">
+                                  {item.ticket_id}
+                                </span>
+                                <span className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md ${
+                                  item.priority === 'Critical' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' :
+                                  item.priority === 'High' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' :
+                                  'bg-slate-700/50 text-slate-300'
+                                }`}>
+                                  {item.priority}
+                                </span>
+                              </div>
+                              <h3 className="text-sm font-semibold text-white mt-2">{item.title}</h3>
+                            </div>
+                            <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg border ${
+                              item.status === 'Resolved' ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30' :
+                              item.status === 'In Progress' ? 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30' :
+                              'bg-amber-500/10 text-amber-300 border-amber-500/30'
+                            }`}>
+                              {item.status}
+                            </span>
+                          </div>
+
+                          <p className="text-xs text-slate-300 mt-2 leading-relaxed">{item.description}</p>
+
+                          {mediaUrl && (
+                            <div className="mt-3 rounded-xl overflow-hidden border border-slate-700/80 max-h-60 bg-black/40 flex items-center justify-center">
+                              {isVideo ? (
+                                <video src={mediaUrl} controls className="max-h-60 w-full object-contain" />
+                              ) : (
+                                <img 
+                                  src={mediaUrl} 
+                                  alt="Evidence" 
+                                  className="max-h-60 w-full object-cover" 
+                                  onError={(e) => {
+                                    e.currentTarget.style.display = 'none';
+                                  }}
+                                />
+                              )}
+                            </div>
+                          )}
+
+                          <div className="flex flex-wrap items-center gap-4 text-[11px] text-slate-400 mt-4 border-t border-slate-700/60 pt-3">
+                            <div className="flex items-center gap-1.5">
+                              <MapPin className="w-3.5 h-3.5 text-slate-500" />
+                              {item.location}
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <Layers className="w-3.5 h-3.5 text-slate-500" />
+                              {item.category}
+                            </div>
+                            <div>
+                              {new Date(item.created_at).toLocaleDateString()}
+                            </div>
+                          </div>
+
+                          {item.resolution && (
+                            <div className="mt-3 bg-emerald-950/30 border border-emerald-500/30 p-3.5 rounded-xl text-xs">
+                              <div className="font-semibold text-emerald-300 flex items-center gap-1.5">
+                                <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Official Resolution Record
+                              </div>
+                              <p className="text-emerald-100 mt-1">{item.resolution.notes}</p>
+                              <div className="text-emerald-400/80 text-[10px] mt-1 font-mono">
+                                Certified by {item.resolution.resolved_by} • {new Date(item.resolution.resolved_at).toLocaleDateString()}
+                              </div>
+                            </div>
+                          )}
+
+                          {user.role === 'admin' && item.status !== 'Resolved' && (
+                            <div className="flex items-center gap-2 mt-4 pt-3 border-t border-slate-700/60">
+                              {item.status === 'Submitted' && (
+                                <button
+                                  onClick={() => handleUpdateStatus(item.id, 'In Progress')}
+                                  className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold rounded-lg transition"
+                                >
+                                  Mark In Progress
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleResolveComplaint(item.id)}
+                                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg transition"
+                              >
+                                Resolve Grievance
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </>
+        )}
       </main>
     </div>
   );
