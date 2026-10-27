@@ -1,33 +1,48 @@
 import os
 import shutil
 import uuid
-from typing import Optional
+from datetime import datetime, timedelta
+from typing import List, Optional
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import (
+    FastAPI,
+    File,
+    Form,
+    HTTPException,
+    UploadFile,
+    Depends,
+    status,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.security import OAuth2PasswordRequestForm
 import httpx
+import jwt
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func, update
 
 import auth
-from database import Base, engine
-from models import complaint as complaint_models
-from schemas import complaint as complaint_schemas
+from database import Base, engine, get_db
+from models.complaint import User, Complaint, Resolution, UserRole
+from schemas.auth import UserCreate, UserOut, Token
+from schemas.complaint import ComplaintCreate, ComplaintOut, StatusUpdate, ResolutionCreate
 
-app = FastAPI(title="CivicFix Municipal Redressal Engine")
+app = FastAPI(title="CivicFix Municipal Redressal Engine", version="1.0.0")
 
-# Async database initialization on startup
+# Async DB initialization on startup
 @app.on_event("startup")
 async def init_tables():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+    except Exception as e:
+        print(f"Startup DB init notice: {e}")
 
-# Ensure persistent uploads folder exists
+# Static uploads directory
 os.makedirs("uploads", exist_ok=True)
-
-# Mount uploads static folder so frontend can load evidence images
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
-# CORS middleware to allow cross-origin requests from Vercel and partner sites
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -36,11 +51,33 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include Authentication & Complaint API Routers
-app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 
-if hasattr(complaint_models, "router"):
-    app.include_router(complaint_models.router, prefix="/api", tags=["Grievances"])
+# --------------------------------------------------------------------------
+# AUTHENTICATION DEPENDENCY & ROUTES
+# --------------------------------------------------------------------------
+
+async def get_current_user(
+    token: str = Depends(auth.oauth2_scheme), 
+    db: AsyncSession = Depends(get_db)
+) -> User:
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, auth.SECRET_KEY, algorithms=[auth.ALGORITHM])
+        email: str = payload.get("sub")
+        if email is None:
+            raise credentials_exception
+    except Exception:
+        raise credentials_exception
+
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalars().first()
+    if user is None:
+        raise credentials_exception
+    return user
 
 
 @app.get("/")
@@ -48,8 +85,189 @@ def health_check():
     return {"status": "healthy", "service": "CivicFix API", "version": "1.0.0"}
 
 
+@app.post("/auth/register", response_model=UserOut, tags=["Authentication"])
+async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).where(User.email == user_data.email))
+    if result.scalars().first():
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    new_user = User(
+        full_name=user_data.full_name,
+        email=user_data.email,
+        hashed_password=auth.get_password_hash(user_data.password),
+        role=user_data.role if hasattr(user_data, "role") and user_data.role else "citizen"
+    )
+    db.add(new_user)
+    await db.commit()
+    await db.refresh(new_user)
+    return new_user
+
+
+@app.post("/auth/login", response_model=Token, tags=["Authentication"])
+async def login(
+    form_data: OAuth2PasswordRequestForm = Depends(), 
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(User).where(User.email == form_data.username))
+    user = result.scalars().first()
+    if not user or not auth.verify_password(form_data.password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    expire = datetime.utcnow() + timedelta(minutes=auth.ACCESS_TOKEN_EXPIRE_MINUTES)
+    token_data = {"sub": user.email, "role": user.role, "exp": expire}
+    access_token = jwt.encode(token_data, auth.SECRET_KEY, algorithm=auth.ALGORITHM)
+    return {"access_token": access_token, "token_type": "bearer"}
+
+
+@app.get("/auth/me", response_model=UserOut, tags=["Authentication"])
+async def get_me(current_user: User = Depends(get_current_user)):
+    return current_user
+
+
+# --------------------------------------------------------------------------
+# GRIEVANCE & COMPLAINT ROUTES
+# --------------------------------------------------------------------------
+
+@app.get("/departments", tags=["Grievances"])
+async def get_departments():
+    return [
+        {"id": 1, "name": "Roads & Infrastructure"},
+        {"id": 2, "name": "Sanitation & Waste"},
+        {"id": 3, "name": "Electrical & Lighting"},
+        {"id": 4, "name": "Water Supply & Drainage"},
+    ]
+
+
+@app.post("/upload", tags=["Grievances"])
+async def upload_media(file: UploadFile = File(...)):
+    ext = os.path.splitext(file.filename)[1] or ".png"
+    unique_name = f"{uuid.uuid4().hex}{ext}"
+    filepath = os.path.join("uploads", unique_name)
+    with open(filepath, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    media_type = "video" if ext.lower() in [".mp4", ".mov", ".webm"] else "image"
+    return {
+        "file_url": f"https://civicfix-t3mx.onrender.com/uploads/{unique_name}",
+        "media_type": media_type
+    }
+
+
+@app.post("/complaints", tags=["Grievances"])
+async def create_complaint(
+    complaint_data: ComplaintCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    ticket_id = f"CF-2026-{uuid.uuid4().hex[:6].upper()}"
+    new_complaint = Complaint(
+        ticket_id=ticket_id,
+        title=complaint_data.title,
+        description=complaint_data.description,
+        category=complaint_data.category,
+        priority=complaint_data.priority,
+        location=complaint_data.location,
+        image_url=complaint_data.image_url,
+        status="Submitted",
+        user_id=current_user.id
+    )
+    db.add(new_complaint)
+    await db.commit()
+    await db.refresh(new_complaint)
+    return new_complaint
+
+
+@app.get("/complaints/my", tags=["Grievances"])
+async def get_my_complaints(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(
+        select(Complaint)
+        .where(Complaint.user_id == current_user.id)
+        .order_by(Complaint.created_at.desc())
+    )
+    return result.scalars().all()
+
+
+@app.get("/admin/complaints", tags=["Admin Operations"])
+async def get_all_complaints(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(Complaint).order_by(Complaint.created_at.desc()))
+    return result.scalars().all()
+
+
+@app.patch("/admin/complaints/{complaint_id}/status", tags=["Admin Operations"])
+async def update_status(
+    complaint_id: int,
+    payload: StatusUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(Complaint).where(Complaint.id == complaint_id))
+    complaint = result.scalars().first()
+    if not complaint:
+        raise HTTPException(status_code=404, detail="Complaint not found")
+
+    complaint.status = payload.status
+    await db.commit()
+    await db.refresh(complaint)
+    return complaint
+
+
+@app.post("/admin/complaints/{complaint_id}/resolve", tags=["Admin Operations"])
+async def resolve_complaint(
+    complaint_id: int,
+    payload: ResolutionCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(Complaint).where(Complaint.id == complaint_id))
+    complaint = result.scalars().first()
+    if not complaint:
+        raise HTTPException(status_code=404, detail="Complaint not found")
+
+    complaint.status = "Resolved"
+    new_res = Resolution(
+        complaint_id=complaint.id,
+        notes=payload.notes,
+        resolved_by=current_user.full_name,
+        resolved_at=datetime.utcnow()
+    )
+    db.add(new_res)
+    await db.commit()
+    await db.refresh(complaint)
+    return complaint
+
+
+@app.get("/admin/analytics", tags=["Admin Operations"])
+async def get_analytics(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    all_complaints = (await db.execute(select(Complaint))).scalars().all()
+    total = len(all_complaints)
+    pending = sum(1 for c in all_complaints if c.status == "Submitted")
+    in_prog = sum(1 for c in all_complaints if c.status == "In Progress")
+    resolved = sum(1 for c in all_complaints if c.status == "Resolved")
+    return {
+        "summary": {
+            "total_complaints": total,
+            "pending": pending,
+            "in_progress": in_prog,
+            "resolved": resolved
+        }
+    }
+
+
 # =========================================================================
-# INTER-SERVICE IMAGE EXCHANGE (CIVICFIX <-> BUILDWISE)
+# INTER-SERVICE IMAGE COLLABORATION (BUILDWISE <-> CIVICFIX)
 # =========================================================================
 
 BUILDWISE_UPLOAD_URL = "https://buildwise-backend-ylo3.onrender.com/api/civic/upload"
