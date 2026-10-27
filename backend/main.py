@@ -366,4 +366,4 @@ async def receive_image_from_buildwise(
         "file_url": f"https://civicfix-t3mx.onrender.com/uploads/{unique_name}",
         "ticket_id": ticket_id or "CF-EXTERNAL",
         "media_type": "image",
-    }x
+    }
