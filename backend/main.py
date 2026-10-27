@@ -18,18 +18,46 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.security import OAuth2PasswordRequestForm
 import httpx
 import jwt
+from pydantic import BaseModel, EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, update
+from sqlalchemy import select
 
 import auth
 from database import Base, engine, get_db
-from models.complaint import User, Complaint, Resolution, UserRole
-from schemas.auth import UserCreate, UserOut, Token
-from schemas.complaint import ComplaintCreate, ComplaintOut, StatusUpdate, ResolutionCreate
+from models.complaint import User, Complaint, Resolution
+
+# --------------------------------------------------------------------------
+# LOCAL PYDANTIC SCHEMAS (Self-contained to avoid any schema import errors)
+# --------------------------------------------------------------------------
+
+class UserRegisterSchema(BaseModel):
+    full_name: str
+    email: EmailStr
+    password: str
+    role: Optional[str] = "citizen"
+
+class ComplaintCreateSchema(BaseModel):
+    title: str
+    description: str
+    category: str
+    location: str
+    priority: str
+    image_url: Optional[str] = None
+
+class StatusUpdateSchema(BaseModel):
+    status: str
+
+class ResolutionCreateSchema(BaseModel):
+    notes: str
+    resolution_image_url: Optional[str] = None
+
+
+# --------------------------------------------------------------------------
+# FASTAPI APP INITIALIZATION
+# --------------------------------------------------------------------------
 
 app = FastAPI(title="CivicFix Municipal Redressal Engine", version="1.0.0")
 
-# Async DB initialization on startup
 @app.on_event("startup")
 async def init_tables():
     try:
@@ -38,11 +66,9 @@ async def init_tables():
     except Exception as e:
         print(f"Startup DB init notice: {e}")
 
-# Static uploads directory
 os.makedirs("uploads", exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
-# CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -53,7 +79,7 @@ app.add_middleware(
 
 
 # --------------------------------------------------------------------------
-# AUTHENTICATION DEPENDENCY & ROUTES
+# AUTHENTICATION
 # --------------------------------------------------------------------------
 
 async def get_current_user(
@@ -85,8 +111,8 @@ def health_check():
     return {"status": "healthy", "service": "CivicFix API", "version": "1.0.0"}
 
 
-@app.post("/auth/register", response_model=UserOut, tags=["Authentication"])
-async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
+@app.post("/auth/register", tags=["Authentication"])
+async def register(user_data: UserRegisterSchema, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.email == user_data.email))
     if result.scalars().first():
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -95,15 +121,20 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
         full_name=user_data.full_name,
         email=user_data.email,
         hashed_password=auth.get_password_hash(user_data.password),
-        role=user_data.role if hasattr(user_data, "role") and user_data.role else "citizen"
+        role=user_data.role or "citizen"
     )
     db.add(new_user)
     await db.commit()
     await db.refresh(new_user)
-    return new_user
+    return {
+        "id": new_user.id,
+        "full_name": new_user.full_name,
+        "email": new_user.email,
+        "role": new_user.role
+    }
 
 
-@app.post("/auth/login", response_model=Token, tags=["Authentication"])
+@app.post("/auth/login", tags=["Authentication"])
 async def login(
     form_data: OAuth2PasswordRequestForm = Depends(), 
     db: AsyncSession = Depends(get_db)
@@ -123,9 +154,14 @@ async def login(
     return {"access_token": access_token, "token_type": "bearer"}
 
 
-@app.get("/auth/me", response_model=UserOut, tags=["Authentication"])
+@app.get("/auth/me", tags=["Authentication"])
 async def get_me(current_user: User = Depends(get_current_user)):
-    return current_user
+    return {
+        "id": current_user.id,
+        "full_name": current_user.full_name,
+        "email": current_user.email,
+        "role": current_user.role
+    }
 
 
 # --------------------------------------------------------------------------
@@ -159,7 +195,7 @@ async def upload_media(file: UploadFile = File(...)):
 
 @app.post("/complaints", tags=["Grievances"])
 async def create_complaint(
-    complaint_data: ComplaintCreate,
+    complaint_data: ComplaintCreateSchema,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -206,7 +242,7 @@ async def get_all_complaints(
 @app.patch("/admin/complaints/{complaint_id}/status", tags=["Admin Operations"])
 async def update_status(
     complaint_id: int,
-    payload: StatusUpdate,
+    payload: StatusUpdateSchema,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -224,7 +260,7 @@ async def update_status(
 @app.post("/admin/complaints/{complaint_id}/resolve", tags=["Admin Operations"])
 async def resolve_complaint(
     complaint_id: int,
-    payload: ResolutionCreate,
+    payload: ResolutionCreateSchema,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -267,7 +303,7 @@ async def get_analytics(
 
 
 # =========================================================================
-# INTER-SERVICE IMAGE COLLABORATION (BUILDWISE <-> CIVICFIX)
+# INTER-SERVICE IMAGE COLLABORATION (CIVICFIX <-> BUILDWISE)
 # =========================================================================
 
 BUILDWISE_UPLOAD_URL = "https://buildwise-backend-ylo3.onrender.com/api/civic/upload"
@@ -280,7 +316,6 @@ async def send_image_to_buildwise(
     ticket_id: Optional[str] = Form(None),
     target_url: Optional[str] = Form(None),
 ):
-    """Dispatches an image directly from CivicFix to BuildWise's server endpoint."""
     dest_url = target_url or BUILDWISE_UPLOAD_URL
     file_bytes = await file.read()
 
@@ -309,15 +344,12 @@ async def send_image_to_buildwise(
         )
 
 
-# TASK 2: RECEIVE IMAGE FROM BUILDWISE (OR ANY EXTERNAL APP) TO CIVICFIX
+# TASK 2: RECEIVE IMAGE FROM BUILDWISE TO CIVICFIX
 @app.post("/api/external/receive-image", tags=["Inter-Service Image Collaboration"])
 async def receive_image_from_buildwise(
     file: UploadFile = File(...), 
     ticket_id: Optional[str] = Form(None)
 ):
-    """Accepts an image sent from BuildWise, saves it to CivicFix /uploads,
-    and returns the public accessible URL.
-    """
     os.makedirs("uploads", exist_ok=True)
 
     ext = os.path.splitext(file.filename)[1] or ".png"
@@ -334,4 +366,4 @@ async def receive_image_from_buildwise(
         "file_url": f"https://civicfix-t3mx.onrender.com/uploads/{unique_name}",
         "ticket_id": ticket_id or "CF-EXTERNAL",
         "media_type": "image",
-    }
+    }x
