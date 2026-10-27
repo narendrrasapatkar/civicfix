@@ -27,7 +27,7 @@ from database import Base, engine, get_db
 from models.complaint import User, Complaint, Resolution
 
 # --------------------------------------------------------------------------
-# LOCAL PYDANTIC SCHEMAS (Self-contained to avoid any schema import errors)
+# LOCAL PYDANTIC SCHEMAS
 # --------------------------------------------------------------------------
 
 class UserRegisterSchema(BaseModel):
@@ -367,3 +367,19 @@ async def receive_image_from_buildwise(
         "ticket_id": ticket_id or "CF-EXTERNAL",
         "media_type": "image",
     }
+
+
+# TASK 3: GET INCOMING FEED (FOR YOUR FRONTEND UI GALLERY)
+@app.get("/api/external/received-feed", tags=["Inter-Service Image Collaboration"])
+async def get_received_feed():
+    """Returns a list of all images received and stored in CivicFix uploads."""
+    folder = "uploads"
+    images = []
+    if os.path.exists(folder):
+        for fname in sorted(os.listdir(folder), reverse=True):
+            if fname.lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
+                images.append({
+                    "filename": fname,
+                    "url": f"https://civicfix-t3mx.onrender.com/uploads/{fname}"
+                })
+    return {"images": images}
