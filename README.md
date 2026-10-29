@@ -1,12 +1,16 @@
-CivixFix: Civic complaint Management and Analytics System
+CivicFix : Civic complaint Management and Analytics System
 
 Project Overview
 This is my semester project for the Advanced Python Programming course. The application is called CivicFix. It is a full-stack civic tech platform designed to help citizens report public infrastructure issues like broken streetlights, water leaks, and potholes directly to municipal authorities. The system uses a clean Python-based backend architecture to process user authentication, manage relational data, handle incoming forms, and update the resolution lifecycle of complaints through an administrative dashboard.
 
+Live Project Links
+- Frontend Live Deployment URL: https://vercel.app
+- Backend API Production URL: Hosted on Render cloud platform
+
 Project Folders
 - backend: This folder handles the core logic of the application. It runs on Python using web frameworks to handle request routing, request payloads, user sessions, data persistence, and error handling.
 - frontend: This folder manages the user interface, reporting forms, status indicators, and interaction scripts for the client side.
-
+Project - Advanced Python Programming Course
 Local Setup Instructions
 1. Clone the project repository to your machine:
    git clone https://github.com
@@ -97,10 +101,20 @@ status_order = case(
 complaints = db.query(Complaint).order_by(status_order).all()
 This guarantees your admin sees urgent, unaddressed issues immediately."
 
-
+---
 
 Prompt 5: Debugging Cross-Origin Resource Sharing (CORS) Issues
 "When my frontend at port 3000 tries to talk to my Python backend running on port 5000, the browser blocks the connection and throws a CORS error. How do I fix this within my Python server code?"
 
 AI Response 5:
 "Browsers restrict cross-origin requests for security reasons. Since your frontend and backend run on different local ports, you must explicitly tell your Python application to accept requests from port 3000. Install the CORS middleware extension for your Python framework (such as flask-cors or fastapi.middleware.cors), initialize it on your app instance, and configure the 'origins' parameter to whitelist 'http://localhost:3000'."
+
+---
+
+Prompt 6: Deploying Python Backend and Frontend Separately
+"How should I host this full stack application once it is completed? I want to host the frontend client on Vercel and the advanced Python backend on Render cloud platform. Are there any configuration adjustments needed?"
+
+AI Response 6:
+"When deploying to separate platforms, make sure to follow these two rules:
+1. Update your production frontend code to fetch from your live production Render URL (e.g., https://onrender.com) instead of localhost:5000.
+2. Update the CORS setup on your Render backend configuration environment to allow your newly generated Vercel production domain name instead of localhost:3000 so the connection is not blocked."
